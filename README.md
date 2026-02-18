@@ -122,32 +122,3 @@ npm install
 PYTHONPATH=src python -m pytest -v
 python benchmarks/bench_pipeline.py
 ```
-
-## Release and Publishing
-
-- Python package publish is automated by `.github/workflows/release.yml`.
-- Trigger: push a tag like `v0.1.0`.
-- Requirement: set `PYPI_API_TOKEN` in repo secrets.
-- npm is currently used only for repo tooling (`commitlint`) via `package.json` and is marked `private`, so it is **not** published to npm.
-
-### Get `PYPI_API_TOKEN`
-
-1. Create or log in to [PyPI](https://pypi.org/).
-2. Go to **Account Settings** -> **API tokens** -> **Add API token**.
-3. Create a token scoped to the project (recommended) or account.
-4. In GitHub repo settings: **Settings** -> **Secrets and variables** -> **Actions** -> **New repository secret**.
-5. Name it `PYPI_API_TOKEN` and paste the token value.
-
-### Node Package Support
-
-This repo currently supports Node apps through the proxy API (HTTP), not a native npm runtime SDK.
-
-If you want a real npm package, typical work is:
-1. Build a JS/TS client SDK (`@aisafeguard/sdk`) for scan/proxy calls.
-2. Add package build pipeline (`tsup`/`rollup`) and type exports.
-3. Add npm publish workflow + `NPM_TOKEN` secret.
-4. Maintain semver/versioning across Python + Node releases.
-
-Estimated effort:
-- Basic SDK wrapper: 1-2 days.
-- Production-grade SDK + docs/tests/release automation: 3-7 days.
