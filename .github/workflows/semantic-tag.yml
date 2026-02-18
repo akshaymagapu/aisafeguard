@@ -8,6 +8,11 @@ on:
 
 permissions:
   contents: write
+  actions: write
+
+concurrency:
+  group: semantic-tag-main
+  cancel-in-progress: false
 
 jobs:
   tag:
@@ -89,9 +94,23 @@ jobs:
 
       - name: Create and push tag
         if: ${{ steps.next.outputs.version != '' }}
+        id: create_tag
         run: |
           TAG="v${{ steps.next.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "Tag already exists: $TAG"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$TAG"
           git push origin "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger release workflow for tag
+        if: ${{ steps.create_tag.outputs.tag != '' }}
+        run: |
+          gh workflow run release.yml --ref "${{ steps.create_tag.outputs.tag }}" -f tag="${{ steps.create_tag.outputs.tag }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
