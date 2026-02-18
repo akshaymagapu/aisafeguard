@@ -1,6 +1,26 @@
 # AISafe Guard
 
-Safety rails for every AI app. `aisafeguard` is a model-agnostic Python toolkit that scans LLM input/output for prompt injection, jailbreaks, PII, toxicity, malicious URLs, and relevance issues.
+`aisafeguard` is an open-source LLM safety and guardrails toolkit for AI apps.
+
+It helps protect against prompt injection, jailbreak attempts, PII leaks, toxic output, and malicious URLs with a Python SDK, CLI, and OpenAI-compatible proxy.
+
+## Why AISafe Guard
+
+- Add AI safety checks to any LLM app with minimal code changes
+- Enforce configurable guardrail policies: `block`, `warn`, `log`, `redact`
+- Protect both input prompts and model outputs
+- Use as a library or as a language-agnostic proxy gateway
+
+## Core Features
+
+- Prompt injection detection
+- Jailbreak detection
+- PII detection and redaction
+- Toxicity filtering
+- Malicious URL detection
+- Relevance checks
+- OpenAI/Anthropic wrappers
+- OpenAI-compatible proxy mode
 
 ## Install
 
@@ -89,6 +109,14 @@ guard = Guard()
 client = wrap_openai(openai_client, guard)
 ```
 
+## Use Cases
+
+- Secure chatbots against prompt injection
+- Prevent sensitive-data leaks in support assistants
+- Add policy controls for enterprise AI workflows
+- Gate unsafe model outputs before returning to end users
+- Centralize AI safety via proxy for multi-language stacks
+
 ## CLI
 
 ```bash
@@ -122,3 +150,11 @@ npm install
 PYTHONPATH=src python -m pytest -v
 python benchmarks/bench_pipeline.py
 ```
+
+## Docs
+
+- `docs/getting-started.md`
+- `docs/config-reference.md`
+- `docs/prompt-injection-protection.md`
+- `docs/pii-redaction-llm.md`
+- `docs/openai-compatible-ai-proxy.md`
