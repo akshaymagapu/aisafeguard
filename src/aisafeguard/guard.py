@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from aisafeguard.config import GuardConfig, get_default_config, load_config
-from aisafeguard.models import Action, PipelineResult, Report
+from aisafeguard.models import PipelineResult, Report
 from aisafeguard.pipeline import Pipeline
-from aisafeguard.policy import PolicyEngine
+from aisafeguard.policy import PolicyEngine, PolicyViolation
 from aisafeguard.scanners.base import InputScanner, OutputScanner
 
 logger = logging.getLogger("aisafeguard")
@@ -156,6 +156,10 @@ class Guard:
     def config(self) -> GuardConfig:
         return self._config
 
+    @property
+    def policy(self) -> PolicyEngine:
+        return self._policy
+
     def add_input_scanner(self, scanner: InputScanner) -> None:
         """Add a custom input scanner."""
         self._input_pipeline.add_scanner(scanner)
@@ -206,7 +210,9 @@ class Guard:
         if input_text is not None:
             report.input_result = await self.scan_input(input_text, context)
             if not report.input_result.passed:
-                if report.input_result.action_taken == Action.BLOCK:
+                try:
+                    self._policy.enforce(report.input_result)
+                except PolicyViolation:
                     report.blocked = True
                     return report
 
@@ -216,7 +222,9 @@ class Guard:
                 ctx["input_text"] = input_text
             report.output_result = await self.scan_output(output_text, ctx)
             if not report.output_result.passed:
-                if report.output_result.action_taken == Action.BLOCK:
+                try:
+                    self._policy.enforce(report.output_result)
+                except PolicyViolation:
                     report.blocked = True
 
         return report

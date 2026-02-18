@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from typing import Any
 
 from aisafeguard.guard import Guard
-from aisafeguard.models import Action
+from aisafeguard.policy import PolicyViolation
 from starlette.requests import Request
 
 
@@ -97,19 +97,22 @@ def create_app(
 
         if user_prompt:
             input_result = await guard.scan_input(user_prompt)
-            if not input_result.passed and input_result.action_taken == Action.BLOCK:
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "error": "blocked_input",
-                        "failed_scanners": input_result.failed_scanners,
-                        "findings": [f.model_dump() for f in input_result.findings],
-                    },
-                )
-            if input_result.action_taken == Action.REDACT and input_result.sanitized:
-                _replace_user_prompt(messages, input_result.sanitized)
-                payload["messages"] = messages
-                user_prompt = input_result.sanitized
+            if not input_result.passed:
+                try:
+                    sanitized_input = guard.policy.enforce(input_result)
+                except PolicyViolation:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "error": "blocked_input",
+                            "failed_scanners": input_result.failed_scanners,
+                            "findings": [f.model_dump() for f in input_result.findings],
+                        },
+                    ) from None
+                if sanitized_input:
+                    _replace_user_prompt(messages, sanitized_input)
+                    payload["messages"] = messages
+                    user_prompt = sanitized_input
 
         upstream_headers = {
             "Authorization": f"Bearer {api_key}",
@@ -139,17 +142,20 @@ def create_app(
 
         if output_text:
             output_result = await guard.scan_output(output_text, context={"input_text": user_prompt})
-            if not output_result.passed and output_result.action_taken == Action.BLOCK:
-                raise HTTPException(
-                    status_code=400,
-                    detail={
-                        "error": "blocked_output",
-                        "failed_scanners": output_result.failed_scanners,
-                        "findings": [f.model_dump() for f in output_result.findings],
-                    },
-                )
-            if output_result.action_taken == Action.REDACT and output_result.sanitized:
-                _replace_assistant_text(upstream_json, output_result.sanitized)
+            if not output_result.passed:
+                try:
+                    sanitized_output = guard.policy.enforce(output_result)
+                except PolicyViolation:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "error": "blocked_output",
+                            "failed_scanners": output_result.failed_scanners,
+                            "findings": [f.model_dump() for f in output_result.findings],
+                        },
+                    ) from None
+                if sanitized_output:
+                    _replace_assistant_text(upstream_json, sanitized_output)
 
         total_spend = costs.add_usage(user_id, upstream_json.get("usage"))
         upstream_json.setdefault("aisafe", {})

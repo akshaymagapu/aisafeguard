@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from aisafeguard.guard import Guard
-from aisafeguard.models import Action
 from aisafeguard.policy import PolicyViolation
 
 
@@ -20,8 +19,8 @@ class _OpenAICompletionsProxy:
         prompt = _extract_openai_prompt(kwargs)
         if prompt:
             input_result = await self.guard.scan_input(prompt)
-            if not input_result.passed and input_result.action_taken == Action.BLOCK:
-                raise PolicyViolation(input_result, "Input blocked by safety policy")
+            if not input_result.passed:
+                self.guard.policy.enforce(input_result)
 
         response = self.create_fn(*args, **kwargs)
         if inspect.isawaitable(response):
@@ -34,10 +33,9 @@ class _OpenAICompletionsProxy:
                 context={"input_text": prompt} if prompt else None,
             )
             if not output_result.passed:
-                if output_result.action_taken == Action.BLOCK:
-                    raise PolicyViolation(output_result, "Output blocked by safety policy")
-                if output_result.action_taken == Action.REDACT and output_result.sanitized:
-                    _set_openai_response_text(response, output_result.sanitized)
+                sanitized = self.guard.policy.enforce(output_result)
+                if sanitized:
+                    _set_openai_response_text(response, sanitized)
 
         return response
 
@@ -74,8 +72,8 @@ class _AnthropicMessagesProxy:
         prompt = _extract_anthropic_prompt(kwargs)
         if prompt:
             input_result = await self.guard.scan_input(prompt)
-            if not input_result.passed and input_result.action_taken == Action.BLOCK:
-                raise PolicyViolation(input_result, "Input blocked by safety policy")
+            if not input_result.passed:
+                self.guard.policy.enforce(input_result)
 
         response = self.create_fn(*args, **kwargs)
         if inspect.isawaitable(response):
@@ -88,10 +86,9 @@ class _AnthropicMessagesProxy:
                 context={"input_text": prompt} if prompt else None,
             )
             if not output_result.passed:
-                if output_result.action_taken == Action.BLOCK:
-                    raise PolicyViolation(output_result, "Output blocked by safety policy")
-                if output_result.action_taken == Action.REDACT and output_result.sanitized:
-                    _set_anthropic_response_text(response, output_result.sanitized)
+                sanitized = self.guard.policy.enforce(output_result)
+                if sanitized:
+                    _set_anthropic_response_text(response, sanitized)
 
         return response
 

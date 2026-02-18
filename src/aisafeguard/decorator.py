@@ -7,7 +7,6 @@ from typing import Any, Callable
 
 from aisafeguard.config import GuardConfig, get_default_config, load_config
 from aisafeguard.guard import Guard
-from aisafeguard.models import Action
 from aisafeguard.policy import PolicyViolation
 
 
@@ -32,21 +31,23 @@ def guard(
             if input and prompt_text is not None:
                 input_result = await _guard_instance.scan_input(prompt_text)
                 if not input_result.passed:
-                    if input_result.action_taken == Action.BLOCK:
+                    try:
+                        sanitized = _guard_instance.policy.enforce(input_result)
+                    except PolicyViolation:
                         if on_block:
                             return on_block(input_result)
                         raise PolicyViolation(
                             input_result,
                             f"Input blocked by: {', '.join(input_result.failed_scanners)}",
                         )
-                    if input_result.action_taken == Action.REDACT and input_result.sanitized:
+                    if sanitized:
                         call_args, call_kwargs = _replace_prompt(
                             call_args,
                             call_kwargs,
                             prompt_location,
-                            input_result.sanitized,
+                            sanitized,
                         )
-                        prompt_text = input_result.sanitized
+                        prompt_text = sanitized
 
             result = await func(*call_args, **call_kwargs)
 
@@ -56,15 +57,17 @@ def guard(
                     context={"input_text": prompt_text} if prompt_text else None,
                 )
                 if not output_result.passed:
-                    if output_result.action_taken == Action.REDACT and output_result.sanitized:
-                        return output_result.sanitized
-                    if output_result.action_taken == Action.BLOCK:
+                    try:
+                        sanitized = _guard_instance.policy.enforce(output_result)
+                    except PolicyViolation:
                         if on_block:
                             return on_block(output_result)
                         raise PolicyViolation(
                             output_result,
                             f"Output blocked by: {', '.join(output_result.failed_scanners)}",
                         )
+                    if sanitized:
+                        return sanitized
 
             return result
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from aisafeguard.models import Action, PipelineResult
@@ -17,6 +18,15 @@ class PolicyViolation(Exception):
         self.result = result
         self.message = message
         super().__init__(message)
+
+
+@dataclass(frozen=True)
+class PolicyDecision:
+    """Normalized policy decision for a scan result."""
+
+    action: Action
+    blocked: bool
+    sanitized: str | None = None
 
 
 class PolicyEngine:
@@ -40,35 +50,24 @@ class PolicyEngine:
         Returns the sanitized text if action is REDACT, None otherwise.
         Raises PolicyViolation if action is BLOCK and the result failed.
         """
-        if result.passed:
-            return None
+        decision = self.decide(result)
 
-        action = result.action_taken
-
-        # Check per-scanner overrides — use the most severe action
-        for scan_result in result.results:
-            if not scan_result.passed:
-                scanner_action = self.get_action(scan_result.scanner)
-                if scanner_action == Action.BLOCK:
-                    action = Action.BLOCK
-                    break
-
-        if action == Action.BLOCK:
-            failed = result.failed_scanners
-            msg = f"Blocked by scanners: {', '.join(failed)}"
-            logger.warning("Policy BLOCK: %s", msg)
-            raise PolicyViolation(result, msg)
-
-        if action == Action.WARN:
+        if decision.action == Action.WARN:
             logger.warning(
                 "Policy WARN: %d findings from %s",
                 len(result.findings),
                 result.failed_scanners,
             )
 
-        if action == Action.REDACT:
+        if decision.action == Action.REDACT:
             logger.info("Policy REDACT: returning sanitized text")
-            return result.sanitized
+            return decision.sanitized
+
+        if decision.blocked:
+            failed = result.failed_scanners
+            msg = f"Blocked by scanners: {', '.join(failed)}"
+            logger.warning("Policy BLOCK: %s", msg)
+            raise PolicyViolation(result, msg)
 
         # LOG action
         logger.info(
@@ -77,3 +76,24 @@ class PolicyEngine:
             result.failed_scanners,
         )
         return None
+
+    def decide(self, result: PipelineResult) -> PolicyDecision:
+        """Compute a normalized policy decision for a pipeline result."""
+        if result.passed:
+            return PolicyDecision(action=Action.LOG, blocked=False)
+
+        action = result.action_taken
+
+        # Respect scanner overrides in case callers inject a custom pipeline.
+        for scan_result in result.results:
+            if not scan_result.passed:
+                scanner_action = self.get_action(scan_result.scanner)
+                if scanner_action == Action.BLOCK:
+                    action = Action.BLOCK
+                    break
+
+        return PolicyDecision(
+            action=action,
+            blocked=action == Action.BLOCK,
+            sanitized=result.sanitized if action == Action.REDACT else None,
+        )
