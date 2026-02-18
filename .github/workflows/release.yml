@@ -14,6 +14,26 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - name: Sync package version from tag
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import os
+          version = os.environ["VERSION"].lstrip("v")
+
+          pyproject = pathlib.Path("pyproject.toml")
+          text = pyproject.read_text()
+          text = re.sub(r'^version = "[^"]+"', f'version = "{version}"', text, flags=re.M)
+          pyproject.write_text(text)
+
+          init_py = pathlib.Path("src/aisafeguard/__init__.py")
+          text = init_py.read_text()
+          text = re.sub(r'__version__ = "[^"]+"', f'__version__ = "{version}"', text)
+          init_py.write_text(text)
+          PY
+        env:
+          VERSION: ${{ github.ref_name }}
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade pip build
