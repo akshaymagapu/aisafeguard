@@ -1,0 +1,15 @@
+{
+  "name": "aisafeguard-repo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Repo tooling for aisafeguard",
+  "scripts": {
+    "test": "echo 'Use PYTHONPATH=src pytest -q for Python tests'",
+    "commitlint": "commitlint --from=HEAD~1 --to=HEAD",
+    "lint:commits": "commitlint --from=origin/main --to=HEAD"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1"
+  }
+}

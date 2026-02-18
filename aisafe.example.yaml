@@ -1,0 +1,63 @@
+# AISafe Guard Configuration
+# Copy this file to aisafe.yaml and customize for your application.
+version: "1"
+
+# Global settings
+settings:
+  fail_action: block        # Default action when a scanner fails: block | warn | log
+  log_level: info            # Logging level: debug | info | warning | error
+  telemetry: true            # Enable OpenTelemetry tracing
+
+# Input scanners — run on user prompts before sending to the LLM
+input:
+  prompt_injection:
+    enabled: true
+    threshold: 0.8           # Sensitivity (0.0 = permissive, 1.0 = strict)
+    action: block            # block | warn | log
+
+  pii:
+    enabled: true
+    entities:                # PII types to detect
+      - EMAIL
+      - PHONE
+      - SSN
+      - CREDIT_CARD
+      - IP_ADDRESS
+    action: redact           # redact replaces with [REDACTED]
+
+  jailbreak:
+    enabled: true
+    threshold: 0.85
+    action: block
+
+  topic_ban:
+    enabled: false
+    banned_topics:
+      - violence
+      - illegal_activity
+    action: block
+
+# Output scanners — run on LLM responses before returning to user
+output:
+  toxicity:
+    enabled: true
+    threshold: 0.7
+    action: block
+
+  pii:
+    enabled: true
+    entities:
+      - EMAIL
+      - PHONE
+      - SSN
+      - CREDIT_CARD
+    action: redact
+
+  relevance:
+    enabled: false
+    threshold: 0.5
+    action: warn
+
+  malicious_url:
+    enabled: true
+    action: block
