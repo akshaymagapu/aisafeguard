@@ -1,0 +1,97 @@
+name: Semantic Tag
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: next
+        run: |
+          python - <<'PY'
+          import re
+          import subprocess
+
+          def sh(*args: str) -> str:
+            return subprocess.check_output(args, text=True).strip()
+
+          def parse_version(tag: str) -> tuple[int, int, int] | None:
+            m = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", tag)
+            if not m:
+              return None
+            return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+          tags_raw = sh("git", "tag", "--list", "v*")
+          tags = []
+          for tag in tags_raw.splitlines():
+            parsed = parse_version(tag)
+            if parsed is not None:
+              tags.append((parsed, tag))
+          tags.sort()
+          latest_tag = tags[-1][1] if tags else None
+
+          head_tags = sh("git", "tag", "--points-at", "HEAD", "v*")
+          if head_tags.strip():
+            with open("/tmp/next_version.txt", "w") as f:
+              f.write("")
+            raise SystemExit(0)
+
+          log_range = f"{latest_tag}..HEAD" if latest_tag else "HEAD"
+          subjects = sh("git", "log", "--format=%s", log_range).splitlines()
+          bodies = sh("git", "log", "--format=%b", log_range).splitlines()
+
+          bump = None
+          for line in subjects:
+            if re.match(r"^[a-zA-Z]+(\(.+\))?!:", line):
+              bump = "major"
+              break
+          if bump is None and any("BREAKING CHANGE" in line for line in bodies):
+            bump = "major"
+          if bump is None and any(re.match(r"^feat(\(.+\))?:", line) for line in subjects):
+            bump = "minor"
+          if bump is None and any(re.match(r"^(fix|perf)(\(.+\))?:", line) for line in subjects):
+            bump = "patch"
+
+          if bump is None:
+            with open("/tmp/next_version.txt", "w") as f:
+              f.write("")
+            raise SystemExit(0)
+
+          major, minor, patch = tags[-1][0] if tags else (0, 0, 0)
+          if bump == "major":
+            major += 1
+            minor = 0
+            patch = 0
+          elif bump == "minor":
+            minor += 1
+            patch = 0
+          else:
+            patch += 1
+          next_version = f"{major}.{minor}.{patch}"
+
+          with open("/tmp/next_version.txt", "w") as f:
+            f.write(next_version)
+          PY
+          NEXT_VERSION="$(cat /tmp/next_version.txt)"
+          echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: ${{ steps.next.outputs.version != '' }}
+        run: |
+          TAG="v${{ steps.next.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
