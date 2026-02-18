@@ -1,225 +1,102 @@
-# AISafe Guard — Universal AI Safety Toolkit
+# AISafe Guard Public Roadmap
 
-## Context
+This document is the public OSS roadmap for `aisafeguard`.
 
-AI applications are shipping without adequate safety controls. The OWASP LLM Top 10 lists prompt injection as the #1 vulnerability, 97% of breached AI organizations lack proper access controls, and AI privacy incidents rose 56.4% year-over-year. Existing tools (Guardrails AI, NeMo Guardrails, LLM Guard) each solve part of the problem but none offer a unified, model-agnostic, low-latency, developer-friendly solution that scales from solo dev to enterprise.
+It focuses on open-source scope, contributor priorities, and release readiness.
 
-**AISafe Guard** fills this gap: an open-core Python library + optional proxy that wraps any LLM call with composable safety checks — prompt injection detection, PII scrubbing, toxicity filtering, hallucination checks, compliance logging — all with <50ms overhead for fast-tier checks.
+## Project Scope (OSS)
 
----
+- Python package: `aisafeguard`
+- CLI: `aisafe`
+- OpenAI-compatible proxy mode
+- Built-in safety scanners for common LLM risks
+- Config-driven policy engine (`block`, `warn`, `log`, `redact`)
+- CI/CD and PyPI publishing
 
-## Project Identity
+## Current Status
 
-**Name:** `aisafeguard` (package name: `aisafeguard`, CLI: `aisafe`)
-**Tagline:** "Safety rails for every AI app"
-**License:** Apache 2.0 (core) + Commercial (enterprise features)
+### Shipped
 
----
+- Core architecture (`Guard`, pipelines, scanner abstractions, policy engine)
+- Built-in scanners:
+  - `prompt_injection`
+  - `jailbreak`
+  - `pii` (input/output)
+  - `toxicity`
+  - `malicious_url`
+  - `topic_ban`
+  - `relevance`
+- YAML configuration + defaults
+- Decorator API (`@guard`)
+- Provider wrappers:
+  - `wrap_openai`
+  - `wrap_anthropic`
+- CLI commands:
+  - `init`
+  - `scan`
+  - `validate`
+  - `proxy`
+  - `redteam`
+- OpenTelemetry hooks + structured logging
+- Proxy forwarding with policy checks
+- Dockerfile, tests, benchmarks, GitHub workflows
 
-## Architecture Overview
+### In Progress
 
-```
-┌──────────────────────────────────────────────────┐
-│              Your Application Code               │
-│  @guard(checks=["injection", "pii", "toxicity"]) │
-│  def ask_llm(prompt): ...                        │
-└────────────┬─────────────────────────────────────┘
-             │
-      ┌──────▼──────────────────────────────────┐
-      │         AISafe Guard Core               │
-      │  ┌─────────┐ ┌──────────┐ ┌──────────┐ │
-      │  │ Input   │ │ Output   │ │ Agent    │ │
-      │  │ Scanner │ │ Scanner  │ │ Scanner  │ │
-      │  └────┬────┘ └─────┬────┘ └─────┬────┘ │
-      │       │             │            │      │
-      │  ┌────▼─────────────▼────────────▼────┐ │
-      │  │     Validator Pipeline              │ │
-      │  │  Tier1: Regex/Rules    (<5ms)       │ │
-      │  │  Tier2: ML Classifiers (20-50ms)    │ │
-      │  │  Tier3: LLM Judges    (100-500ms)   │ │
-      │  └────┬───────────────────────────────┘ │
-      │       │                                 │
-      │  ┌────▼──────────────────────────────┐  │
-      │  │  Policy Engine (YAML + Code)      │  │
-      │  │  → block / warn / log / redact    │  │
-      │  └────┬──────────────────────────────┘  │
-      │       │                                 │
-      │  ┌────▼──────────────────────────────┐  │
-      │  │  Telemetry (OpenTelemetry)        │  │
-      │  │  → traces, metrics, audit logs    │  │
-      │  └───────────────────────────────────┘  │
-      └─────────────────────────────────────────┘
-             │
-      ┌──────▼──────────────────────────────────┐
-      │  Optional: AISafe Proxy (FastAPI)       │
-      │  OpenAI-compatible API gateway          │
-      │  Works with ANY language/framework      │
-      └─────────────────────────────────────────┘
-```
+- Documentation hardening (usage examples, troubleshooting, integration guides)
+- Expanded scanner test corpus and red-team prompts
+- Proxy performance and reliability tuning
 
----
+### Planned
 
-## Key Abstractions
+- Additional scanners (hallucination, bias, code security)
+- More provider/framework integrations
+- Better benchmark reporting and performance baselines
+- Extended policy presets for common use cases
 
-| Concept | Description |
-|---------|-------------|
-| **Guard** | Top-level orchestrator. Wraps an LLM call, runs input scanners before and output scanners after. |
-| **Scanner** | A check that runs on text. Returns `ScanResult(passed, score, findings, remediation)`. Two types: `InputScanner` and `OutputScanner`. |
-| **Policy** | Rules that determine what to do when a scanner fails: `block`, `warn`, `redact`, `log`. Configurable per-scanner. |
-| **Pipeline** | An ordered chain of scanners. Supports tiered execution (fast checks first, skip slow checks if fast ones pass). |
-| **Report** | Structured output of all scanner results, timings, and policy decisions for a single LLM interaction. |
+## Milestones
 
----
+### Milestone A: Core Stability
 
-## Phase 1 — MVP (Core Library)
+Goal: Keep OSS core reliable and predictable for production use.
 
-### Goal
-A pip-installable library that wraps any LLM call with safety checks. Zero-config defaults that work, YAML config for customization.
+- Maintain green CI and release quality checks
+- Improve scanner precision/recall on curated test sets
+- Expand regression tests for policy and proxy behavior
 
-### 1.1 Core Scanners (8 built-in)
+### Milestone B: Ecosystem Integrations
 
-**Input Scanners:**
-| Scanner | Tier | Method | Description |
-|---------|------|--------|-------------|
-| `PromptInjection` | 1+2 | Regex heuristics + small classifier model | Detects direct/indirect prompt injection attempts |
-| `Jailbreak` | 2 | ML classifier (DeBERTa-based) | Detects jailbreak patterns (DAN, roleplay, etc.) |
-| `PIIInput` | 1 | Regex + spaCy NER | Detects PII in user prompts before sending to LLM |
-| `TopicBan` | 1 | Keyword + embedding similarity | Restricts prompts to allowed topics |
+Goal: Reduce adoption friction in existing AI stacks.
 
-**Output Scanners:**
-| Scanner | Tier | Method | Description |
-|---------|------|--------|-------------|
-| `PIIOutput` | 1 | Regex + spaCy NER | Detects/redacts PII in LLM responses |
-| `Toxicity` | 2 | ML classifier (detoxify) | Scores toxicity, hate, threat, insult |
-| `Relevance` | 2 | Embedding similarity | Checks if response is relevant to the prompt |
-| `MaliciousURL` | 1 | URL extraction + blocklist | Detects known malicious URLs in output |
+- Improve wrapper compatibility across SDK versions
+- Add practical framework examples
+- Add stronger proxy interoperability tests
 
-### 1.2 API Design
+### Milestone C: Performance and Operations
 
-**Pattern 1: Decorator (simplest)**
-```python
-from aisafeguard import guard
+Goal: Support higher traffic and better observability.
 
-@guard(input=["prompt_injection", "pii"], output=["toxicity", "pii"])
-async def ask(prompt: str, model: str = "gpt-4") -> str:
-    return await openai.chat(model=model, messages=[{"role": "user", "content": prompt}])
+- Tiered scan latency tracking in benchmarks
+- Better proxy error handling and metrics
+- Operational runbooks and deployment guides
 
-result = await ask("What is John's SSN?")
-```
+## Contribution Priorities
 
-**Pattern 2: Context Manager (more control)**
-```python
-from aisafeguard import Guard
+Good first contribution areas:
 
-async with Guard(config="aisafe.yaml") as g:
-    input_result = await g.scan_input(user_prompt)
-    if not input_result.passed:
-        print(f"Blocked: {input_result.findings}")
-        return
+- Scanner test cases and false-positive tuning
+- Documentation examples for common app patterns
+- CLI UX improvements
+- Proxy reliability and edge-case handling
+- Integration tests for wrappers and proxy contracts
 
-    response = await openai.chat(messages=[{"role": "user", "content": user_prompt}])
+## Release Model
 
-    output_result = await g.scan_output(response.content, context=user_prompt)
-    if not output_result.passed:
-        response = output_result.sanitized
-```
+- PyPI publish is tag-driven (`vX.Y.Z`) via GitHub Actions
+- Conventional commits are used for changelog/version automation
+- Main branch is protected and uses PR-based merges
 
-**Pattern 3: Wrap any LLM provider (zero-change integration)**
-```python
-from aisafeguard import Guard
-from aisafeguard.integrations import wrap_openai
-import openai
+## Notes
 
-client = wrap_openai(openai.AsyncOpenAI(), guard=Guard(config="aisafe.yaml"))
-
-response = await client.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}]
-)
-```
-
-### 1.3 YAML Configuration
-
-```yaml
-# aisafe.yaml
-version: "1"
-
-settings:
-  fail_action: block
-  log_level: info
-  telemetry: true
-
-input:
-  prompt_injection:
-    enabled: true
-    threshold: 0.8
-    action: block
-  pii:
-    enabled: true
-    entities: [EMAIL, PHONE, SSN, CREDIT_CARD]
-    action: redact
-  jailbreak:
-    enabled: true
-    threshold: 0.85
-    action: block
-
-output:
-  toxicity:
-    enabled: true
-    threshold: 0.7
-    action: block
-  pii:
-    enabled: true
-    entities: [EMAIL, PHONE, SSN, CREDIT_CARD]
-    action: redact
-  malicious_url:
-    enabled: true
-    action: block
-```
-
-### 1.4 Install Tiers
-```bash
-pip install aisafeguard                    # Core: regex scanners, PII, config, CLI (~5 deps)
-pip install aisafeguard[ml]                # + ML classifiers (toxicity, jailbreak, injection)
-pip install aisafeguard[proxy]             # + FastAPI proxy server
-pip install aisafeguard[integrations]      # + LangChain, LiteLLM wrappers
-pip install aisafeguard[all]               # Everything
-```
-
----
-
-## Phase 2 — Proxy + Integrations + Dashboard
-
-### 2.1 Proxy / Gateway Mode
-- FastAPI server with OpenAI-compatible `/v1/chat/completions` endpoint
-- Forwards to any upstream LLM (OpenAI, Anthropic, Ollama, vLLM, etc.)
-- Rate limiting, cost tracking, per-user policies
-- Docker image for easy deployment
-
-### 2.2 Web Dashboard (Open-Core)
-- **Free tier:** Real-time log viewer, scanner results, basic metrics
-- **Premium tier:** Analytics, trend charts, compliance reports, team management
-
-### 2.3 Additional Scanners
-- `HallucinationCheck`, `BiasDetection`, `CodeSecurity`, `CopyrightCheck`, `LanguageDetection`, `SensitiveTopics`
-
-### 2.4 Framework Integrations
-- LangChain / LangGraph, LiteLLM, Vercel AI SDK, Haystack, CrewAI / AutoGen
-
----
-
-## Phase 3 — Enterprise (Premium)
-
-### 3.1 Compliance Module
-- GDPR, HIPAA, SOC2, EU AI Act, PCI-DSS profiles
-- Audit trail generation, data residency controls
-
-### 3.2 Red-Team Testing Framework
-- 500+ adversarial test cases
-- CI/CD integration (`aisafe redteam` in GitHub Actions)
-
-### 3.3 Team & Policy Management
-- RBAC, shared policy repo, approval workflows
-
-### 3.4 Advanced Analytics
-- Violation trends, scanner effectiveness, cost analysis
+- This roadmap intentionally excludes private/commercial planning details.
+- Public issues and PRs should align with the OSS scope listed above.
