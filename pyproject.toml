@@ -70,10 +70,10 @@ dev = [
 aisafe = "aisafeguard.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/aisafeguard/aisafeguard"
-Documentation = "https://aisafeguard.dev"
-Repository = "https://github.com/aisafeguard/aisafeguard"
-Issues = "https://github.com/aisafeguard/aisafeguard/issues"
+Homepage = "https://github.com/akshaymagapu/aisafeguard"
+Documentation = "https://github.com/akshaymagapu/aisafeguard/tree/main/docs"
+Repository = "https://github.com/akshaymagapu/aisafeguard"
+Issues = "https://github.com/akshaymagapu/aisafeguard/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
