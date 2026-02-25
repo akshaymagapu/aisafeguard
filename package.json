@@ -9,7 +9,7 @@
     "lint:commits": "commitlint --from=origin/main --to=HEAD"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.4.1",
+    "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2"
   }
 }
